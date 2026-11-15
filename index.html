@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>River130 画面録画＆スクショスタジオ</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap');
+    body {
+      font-family: 'Noto Sans JP', sans-serif;
+      background-color: #0f172a;
+      color: #f8fafc;
+      -webkit-tap-highlight-color: transparent;
+    }
+    @keyframes pulse-rec {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(1.15); }
+    }
+    .rec-dot {
+      animation: pulse-rec 1.2s infinite ease-in-out;
+    }
+    .glass-panel {
+      background: rgba(30, 41, 59, 0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(148, 163, 184, 0.15);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between pb-16">
+
+  <!-- トースト通知 -->
+  <div id="toast" class="fixed top-4 left-1/2 -translate-x-1/2 z-50 pointer-events-none opacity-0 transition-all duration-300 transform -translate-y-2">
+    <div id="toast-inner" class="bg-emerald-600 text-white font-bold px-5 py-3 rounded-full shadow-2xl flex items-center gap-2 text-sm border border-emerald-400/30">
+      <span id="toast-icon">✅</span>
+      <span id="toast-msg">完了しました</span>
+    </div>
+  </div>
+
+  <!-- ヘッダー -->
+  <header class="sticky top-0 z-30 glass-panel border-b border-slate-700/80 px-4 py-3">
+    <div class="max-w-5xl mx-auto flex flex-wrap items-center justify-between gap-2">
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-rose-500 to-indigo-600 flex items-center justify-center text-lg shadow-lg">
+          🎥
+        </div>
+        <div>
+          <h1 class="text-base sm:text-lg font-black tracking-tight text-white leading-tight">
+            画面録画＆スクショスタジオ
+          </h1>
+          <p class="text-[11px] text-slate-400">インストール不要・ブラウザ完結型 キャプチャツール</p>
+        </div>
+      </div>
+
+      <!-- ステータスバッジ -->
+      <div id="status-badge" class="flex items-center gap-2 bg-slate-800/90 border border-slate-700 px-3 py-1.5 rounded-full text-xs font-bold">
+        <span id="status-dot" class="w-2.5 h-2.5 rounded-full bg-slate-500"></span>
+        <span id="status-text" class="text-slate-300">待機中</span>
+        <span id="rec-timer" class="hidden font-mono text-rose-400 ml-1">00:00</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- メインコンテンツ -->
+  <main class="max-w-5xl w-full mx-auto px-4 pt-4 space-y-5 flex-1">
+
+    <!-- 環境判定アラート（iframeプレビューやスマホ時の自動案内） -->
+    <div id="env-banner" class="hidden rounded-2xl p-4 border text-sm leading-relaxed"></div>
+
+    <!-- コントロールパネル（大型アクションボタン） -->
+    <section class="glass-panel rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
+      <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700/70 pb-3">
+        <h2 class="text-sm font-bold text-slate-200 flex items-center gap-1.5">
+          <span>🎛️</span> キャプチャ操作パネル
+        </h2>
+        <!-- 音声設定オプション -->
+        <div class="flex flex-wrap items-center gap-3 text-xs">
+          <label class="flex items-center gap-1.5 cursor-pointer bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-700 hover:border-slate-500">
+            <input type="checkbox" id="opt-sys-audio" checked class="accent-indigo-500 w-4 h-4">
+            <span class="text-slate-200 font-medium">🔊 システム音声を含める</span>
+          </label>
+          <label class="flex items-center gap-1.5 cursor-pointer bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-700 hover:border-slate-500">
+            <input type="checkbox" id="opt-mic-audio" class="accent-rose-500 w-4 h-4">
+            <span class="text-slate-200 font-medium">🎙️ マイク音声を重ねる</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- メインアクションボタン群（片手でも押しやすい大型設計） -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <!-- 1. 画面共有／録画開始 -->
+        <button id="btn-start-rec" onclick="startRecording()" class="w-full py-4 px-4 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 active:scale-[0.98] text-white font-black text-base shadow-lg shadow-rose-950/50 flex items-center justify-center gap-2 transition">
+          <span class="text-xl">⏺️</span>
+          <span>画面録画をスタート</span>
+        </button>
+
+        <!-- 2. 録画停止（録画中のみ有効） -->
+        <button id="btn-stop-rec" onclick="stopRecording()" disabled class="w-full py-4 px-4 rounded-xl bg-slate-800 text-slate-500 font-black text-base border border-slate-700 flex items-center justify-center gap-2 transition disabled:opacity-50 disabled:cursor-not-allowed">
+          <span class="text-xl">⏹️</span>
+          <span>録画を停止・保存</span>
+        </button>
+
+        <!-- 3. ワンタップ高画質スクショ -->
+        <button id="btn-screenshot" onclick="takeScreenshot()" class="w-full py-4 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 active:scale-[0.98] text-white font-black text-base shadow-lg shadow-indigo-950/50 flex items-center justify-center gap-2 transition">
+          <span class="text-xl">📸</span>
+          <span>今すぐスクショ撮影</span>
+        </button>
+      </div>
+
+      <!-- ライブプレビューモニター -->
+      <div class="relative rounded-xl overflow-hidden bg-slate-950 border border-slate-800 aspect-video flex items-center justify-center">
+        <video id="preview-video" autoplay muted playsinline class="w-full h-full object-contain hidden"></video>
+        
+        <!-- 待機中のプレースホルダー -->
+        <div id="preview-placeholder" class="text-center p-6 space-y-3 max-w-md">
+          <div class="text-4xl">🖥️ / 📱</div>
+          <p class="text-sm font-bold text-slate-300">
+            「画面録画をスタート」または「今すぐスクショ撮影」を押すと、対象画面の選択ウィンドウが開きます
+          </p>
+          <p class="text-xs text-slate-400">
+            ※PCでは「画面全体」「アプリウィンドウ」「Chromeタブ」から選択可能。<br>
+            ※スマホでは下の「📱 スマホ標準の録画・スクショ手順」もワンタップで確認できます。
+          </p>
+        </div>
+
+        <!-- 録画中のフローティングインジケーター -->
+        <div id="live-rec-badge" class="hidden absolute top-3 left-3 bg-rose-600/95 text-white text-xs font-black px-3 py-1.5 rounded-full shadow-lg flex items-center gap-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-white rec-dot"></span>
+          <span>REC 録画中</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 撮影・録画データ ギャラリー（その場でプレビュー＆ダウンロード） -->
+    <section class="glass-panel rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-700/70 pb-3">
+        <h2 class="text-sm font-bold text-slate-200 flex items-center gap-1.5">
+          <span>📂</span> 撮影した録画・スクリーンショット一覧
+          <span id="capture-count" class="bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-xs px-2 py-0.5 rounded-full ml-1">0件</span>
+        </h2>
+        <button onclick="clearGallery()" class="text-xs text-slate-400 hover:text-rose-400 font-bold px-2.5 py-1 rounded-lg hover:bg-slate-800 transition">
+          🗑️ リストをクリア
+        </button>
+      </div>
+
+      <div id="gallery-empty" class="text-center py-8 text-slate-400 text-xs space-y-1">
+        <p class="text-sm font-bold text-slate-300">まだ録画・スクショデータはありません</p>
+        <p>上のボタンから録画停止またはスクショ撮影を行うと、ここに自動で並びます（ワンクリックで端末へ保存可能）。</p>
+      </div>
+
+      <div id="gallery-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+    </section>
+
+    <!-- スマホ（iPhone / Android）専用クイックガイド（スマホアクセス時に自動展開） -->
+    <section id="mobile-guide-section" class="glass-panel rounded-2xl p-4 sm:p-5 shadow-xl space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-bold text-amber-300 flex items-center gap-1.5">
+          <span>📱</span> スマートフォン（iPhone / Android）での画面録画・スクショ方法
+        </h2>
+        <span class="text-[11px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded font-bold">OS仕様ガイド</span>
+      </div>
+      <p class="text-xs text-slate-300 leading-relaxed">
+        iPhone（iOS）やAndroidのセキュリティ仕様上、ブラウザ単体から「スマホのホーム画面や他アプリの画面」を直接録画することは制限されています。スマホ画面を収録する際は、以下の<strong>端末標準機能（無料・最高画質）</strong>をご活用ください。
+      </p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+        <!-- iPhone -->
+        <div class="bg-slate-900/90 border border-slate-700/80 rounded-xl p-3.5 space-y-1.5">
+          <div class="font-bold text-xs text-white flex items-center gap-1.5">
+            <span>🍎</span> iPhone / iPad の場合
+          </div>
+          <ul class="text-xs text-slate-300 space-y-1 list-disc list-inside">
+            <li><strong>画面録画：</strong>画面右上から下にスワイプ（コントロールセンター）➜ <strong>「◉（二重丸）」</strong>をタップ（3秒後に開始）。長押しでマイク音声ON/OFF可能。</li>
+            <li><strong>スクショ：</strong>「電源ボタン ＋ 音量上げるボタン」を同時押し。</li>
+          </ul>
+        </div>
+        <!-- Android -->
+        <div class="bg-slate-900/90 border border-slate-700/80 rounded-xl p-3.5 space-y-1.5">
+          <div class="font-bold text-xs text-white flex items-center gap-1.5">
+            <span>🤖</span> Android の場合
+          </div>
+          <ul class="text-xs text-slate-300 space-y-1 list-disc list-inside">
+            <li><strong>画面録画：</strong>画面上から下にスワイプ（クイック設定）➜ <strong>「スクリーンレコード」</strong>をタップ（メディア音声・マイク選択可）。</li>
+            <li><strong>スクショ：</strong>「電源ボタン ＋ 音量下げるボタン」を同時押し。</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- スクロール時「先頭へ戻る」FAB（PWA・スマホ対応） -->
+  <button id="scroll-top-btn" onclick="scrollToTop()" class="fixed right-4 z-40 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-3.5 py-3 rounded-full shadow-2xl border border-indigo-400/40 flex items-center gap-1 transition-all duration-300 opacity-0 pointer-events-none" style="bottom: calc(1.25rem + env(safe-area-inset-bottom));">
+    <span>⬆️</span>
+    <span>先頭へ</span>
+  </button>
+
+  <!-- 非表示キャンバス（スクショ抽出用） -->
+  <canvas id="capture-canvas" class="hidden"></canvas>
+
+  <script>
+    let mediaStream = null;
+    let micStream = null;
+    let combinedStream = null;
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let timerInterval = null;
+    let secondsElapsed = 0;
+    let captureCount = 0;
+
+    const previewVideo = document.getElementById('preview-video');
+    const previewPlaceholder = document.getElementById('preview-placeholder');
+    const liveRecBadge = document.getElementById('live-rec-badge');
+    const btnStartRec = document.getElementById('btn-start-rec');
+    const btnStopRec = document.getElementById('btn-stop-rec');
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+    const recTimer = document.getElementById('rec-timer');
+    const galleryGrid = document.getElementById('gallery-grid');
+    const galleryEmpty = document.getElementById('gallery-empty');
+    const captureCountEl = document.getElementById('capture-count');
+
+    // 起動時の環境チェック（iframe制限・モバイル端末の自動判定）
+    window.addEventListener('DOMContentLoaded', () => {
+      const envBanner = document.getElementById('env-banner');
+      const isInIframe = (window.self !== window.top);
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const hasDisplayMedia = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+
+      if (isInIframe) {
+        envBanner.className = 'rounded-2xl p-4 border border-amber-500/40 bg-amber-950/40 text-amber-200 text-xs sm:text-sm leading-relaxed block';
+        envBanner.innerHTML = `
+          <div class="font-bold text-amber-300 mb-1">⚠️ 現在はプレビュー枠（iframe）内で開かれています</div>
+          ブラウザのセキュリティ仕様により、チャット内のプレビュー画面上では画面共有・録画APIが制限されます。右上の<strong>「ダウンロード」ボタンからHTMLファイルを保存してブラウザで直接開く（またはGitHub Pages / Netlifyで公開する）</strong>と、PC画面の録画・スクショ機能がフル稼働します！
+        `;
+      } else if (isMobile || !hasDisplayMedia) {
+        envBanner.className = 'rounded-2xl p-4 border border-sky-500/40 bg-sky-950/40 text-sky-200 text-xs sm:text-sm leading-relaxed block';
+        envBanner.innerHTML = `
+          <div class="font-bold text-sky-300 mb-1">📱 スマートフォン端末を検出しました</div>
+          スマホのブラウザはOS制限により外部アプリの画面キャプチャができないため、画面下部の<strong>「📱 スマートフォンでの画面録画・スクショ方法」</strong>の手順で端末標準機能をご利用ください。PCブラウザで本ファイルを開くと、ワンクリック録画＆スクショが直接動作します。
+        `;
+      }
+    });
+
+    // トースト通知
+    function showToast(msg, type = 'success') {
+      const toast = document.getElementById('toast');
+      const inner = document.getElementById('toast-inner');
+      const icon = document.getElementById('toast-icon');
+      const text = document.getElementById('toast-msg');
+
+      text.textContent = msg;
+      if (type === 'error') {
+        inner.className = 'bg-rose-600 text-white font-bold px-5 py-3 rounded-full shadow-2xl flex items-center gap-2 text-sm border border-rose-400/30';
+        icon.textContent = '⚠️';
+      } else if (type === 'rec') {
+        inner.className = 'bg-rose-600 text-white font-bold px-5 py-3 rounded-full shadow-2xl flex items-center gap-2 text-sm border border-rose-400/30';
+        icon.textContent = '⏺️';
+      } else {
+        inner.className = 'bg-emerald-600 text-white font-bold px-5 py-3 rounded-full shadow-2xl flex items-center gap-2 text-sm border border-emerald-400/30';
+        icon.textContent = '✅';
+      }
+
+      toast.classList.remove('opacity-0', '-translate-y-2');
+      toast.classList.add('opacity-100', 'translate-y-0');
+      setTimeout(() => {
+        toast.classList.remove('opacity-100', 'translate-y-0');
+        toast.classList.add('opacity-0', '-translate-y-2');
+      }, 3200);
+    }
+
+    // 日時フォーマット（ファイル名用）
+    function getTimestampString() {
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    }
+
+    // 録画タイマー更新
+    function updateTimer() {
+      secondsElapsed++;
+      const mins = String(Math.floor(secondsElapsed / 60)).padStart(2, '0');
+      const secs = String(secondsElapsed % 60).padStart(2, '0');
+      recTimer.textContent = `${mins}:${secs}`;
+    }
+
+    // 1. 画面録画スタート
+    async function startRecording() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        showToast('このブラウザ環境では画面共有APIが制限されています。ファイルを保存してPCブラウザで開いてください。', 'error');
+        return;
+      }
+
+      try {
+        const includeSysAudio = document.getElementById('opt-sys-audio').checked;
+        const includeMicAudio = document.getElementById('opt-mic-audio').checked;
+
+        // 画面ストリーム取得
+        mediaStream = await navigator.mediaDevices.getDisplayMedia({
+          video: { cursor: 'always', frameRate: { ideal: 30, max: 60 } },
+          audio: includeSysAudio
+        });
+
+        const tracks = [...mediaStream.getVideoTracks()];
+
+        // 音声トラックの統合（システム音声 + マイク音声）
+        if (includeMicAudio) {
+          try {
+            micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            const audioCtx = new AudioContext();
+            const dest = audioCtx.createMediaStreamDestination();
+
+            if (mediaStream.getAudioTracks().length > 0) {
+              const sysSource = audioCtx.createMediaStreamSource(new MediaStream([mediaStream.getAudioTracks()[0]]));
+              sysSource.connect(dest);
+            }
+            const micSource = audioCtx.createMediaStreamSource(micStream);
+            micSource.connect(dest);
+
+            tracks.push(...dest.stream.getAudioTracks());
+          } catch (micErr) {
+            console.warn('マイク取得スキップ:', micErr);
+            if (mediaStream.getAudioTracks().length > 0) {
+              tracks.push(...mediaStream.getAudioTracks());
+            }
+          }
+        } else if (mediaStream.getAudioTracks().length > 0) {
+          tracks.push(...mediaStream.getAudioTracks());
+        }
+
+        combinedStream = new MediaStream(tracks);
+
+        // プレビュー表示
+        previewVideo.srcObject = mediaStream;
+        previewVideo.classList.remove('hidden');
+        previewPlaceholder.classList.add('hidden');
+        liveRecBadge.classList.remove('hidden');
+
+        // ブラウザ側の「共有を停止」ボタンが押された時のハンドリング
+        mediaStream.getVideoTracks()[0].onended = () => {
+          if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            stopRecording();
+          }
+        };
+
+        // 録画フォーマット自動判定（MP4対応ブラウザならMP4優先、それ以外はWebM）
+        let mimeType = 'video/webm;codecs=vp9,opus';
+        let ext = 'webm';
+        if (MediaRecorder.isTypeSupported('video/mp4')) {
+          mimeType = 'video/mp4';
+          ext = 'mp4';
+        } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')) {
+          mimeType = 'video/webm;codecs=vp8,opus';
+        } else if (MediaRecorder.isTypeSupported('video/webm')) {
+          mimeType = 'video/webm';
+        }
+
+        recordedChunks = [];
+        mediaRecorder = new MediaRecorder(combinedStream, { mimeType });
+
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data && event.data.size > 0) {
+            recordedChunks.push(event.data);
+          }
+        };
+
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(recordedChunks, { type: mimeType });
+          const url = URL.createObjectURL(blob);
+          const filename = `screen_rec_${getTimestampString()}.${ext}`;
+          addToGallery('video', url, filename, blob.size);
+          cleanupStreams();
+          showToast('録画が完了しました！一覧から保存できます');
+        };
+
+        mediaRecorder.start(1000);
+
+        // UI状態更新
+        btnStartRec.disabled = true;
+        btnStartRec.classList.add('opacity-50', 'cursor-not-allowed');
+        btnStopRec.disabled = false;
+        btnStopRec.className = 'w-full py-4 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-[0.98] text-slate-950 font-black text-base shadow-lg flex items-center justify-center gap-2 transition cursor-pointer';
+
+        statusDot.className = 'w-2.5 h-2.5 rounded-full bg-rose-500 rec-dot';
+        statusText.textContent = '録画中';
+        statusText.className = 'text-rose-400';
+        secondsElapsed = 0;
+        recTimer.textContent = '00:00';
+        recTimer.classList.remove('hidden');
+        timerInterval = setInterval(updateTimer, 1000);
+
+        showToast('画面録画を開始しました', 'rec');
+      } catch (err) {
+        console.error(err);
+        showToast('画面選択がキャンセルされたか、権限が許可されませんでした', 'error');
+      }
+    }
+
+    // 2. 録画停止
+    function stopRecording() {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
+      clearInterval(timerInterval);
+      recTimer.classList.add('hidden');
+      liveRecBadge.classList.add('hidden');
+
+      btnStartRec.disabled = false;
+      btnStartRec.classList.remove('opacity-50', 'cursor-not-allowed');
+      btnStopRec.disabled = true;
+      btnStopRec.className = 'w-full py-4 px-4 rounded-xl bg-slate-800 text-slate-500 font-black text-base border border-slate-700 flex items-center justify-center gap-2 transition disabled:opacity-50 disabled:cursor-not-allowed';
+
+      statusDot.className = 'w-2.5 h-2.5 rounded-full bg-slate-500';
+      statusText.textContent = '待機中';
+      statusText.className = 'text-slate-300';
+    }
+
+    // ストリーム解放
+    function cleanupStreams() {
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(t => t.stop());
+        mediaStream = null;
+      }
+      if (micStream) {
+        micStream.getTracks().forEach(t => t.stop());
+        micStream = null;
+      }
+      previewVideo.srcObject = null;
+      previewVideo.classList.add('hidden');
+      previewPlaceholder.classList.remove('hidden');
+    }
+
+    // 3. ワンタップ高画質スクリーンショット撮影
+    async function takeScreenshot() {
+      // すでに録画中でライブ映像が流れている場合は、そのフレームを即座にキャプチャ
+      if (mediaStream && previewVideo.readyState >= 2) {
+        captureFrameFromVideo(previewVideo);
+        return;
+      }
+
+      // 待機中の場合は一度画面選択ダイアログを出して1フレームだけ取得して自動終了
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        showToast('このブラウザ環境では画面キャプチャAPIが制限されています。保存したHTMLを直接開いてください。', 'error');
+        return;
+      }
+
+      try {
+        const tempStream = await navigator.mediaDevices.getDisplayMedia({
+          video: { cursor: 'always' },
+          audio: false
+        });
+
+        const tempVideo = document.createElement('video');
+        tempVideo.srcObject = tempStream;
+        tempVideo.muted = true;
+        await tempVideo.play();
+
+        // 描画安定のためわずかに待機してキャプチャ
+        setTimeout(() => {
+          captureFrameFromVideo(tempVideo);
+          tempStream.getTracks().forEach(t => t.stop());
+        }, 250);
+      } catch (err) {
+        console.error(err);
+        showToast('スクリーンショットがキャンセルされました', 'error');
+      }
+    }
+
+    // Video要素からPNG画像を切り出し
+    function captureFrameFromVideo(videoEl) {
+      const canvas = document.getElementById('capture-canvas');
+      canvas.width = videoEl.videoWidth || 1920;
+      canvas.height = videoEl.videoHeight || 1080;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const filename = `screenshot_${getTimestampString()}.png`;
+        addToGallery('image', url, filename, blob.size);
+        showToast('スクリーンショットを撮影しました！');
+      }, 'image/png');
+    }
+
+    // ギャラリーへの追加表示
+    function addToGallery(type, url, filename, sizeBytes) {
+      captureCount++;
+      captureCountEl.textContent = `${captureCount}件`;
+      galleryEmpty.classList.add('hidden');
+
+      const sizeMB = (sizeBytes / (1024 * 1024)).toFixed(2);
+      const card = document.createElement('div');
+      card.className = 'bg-slate-900/90 border border-slate-700/80 rounded-xl overflow-hidden flex flex-col justify-between shadow-md';
+
+      const mediaHtml = type === 'video'
+        ? `<video src="${url}" controls class="w-full aspect-video bg-black object-contain"></video>`
+        : `<img src="${url}" alt="${filename}" class="w-full aspect-video bg-black object-contain">`;
+
+      const badgeHtml = type === 'video'
+        ? `<span class="bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[10px] font-bold px-2 py-0.5 rounded">🎥 動画 (${sizeMB} MB)</span>`
+        : `<span class="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[10px] font-bold px-2 py-0.5 rounded">📸 画像 (${sizeMB} MB)</span>`;
+
+      card.innerHTML = `
+        <div>
+          ${mediaHtml}
+          <div class="p-3 space-y-1.5">
+            <div class="flex items-center justify-between gap-2">
+              ${badgeHtml}
+              <span class="text-[11px] text-slate-400 font-mono truncate">${filename}</span>
+            </div>
+          </div>
+        </div>
+        <div class="px-3 pb-3">
+          <a href="${url}" download="${filename}" class="w-full py-2.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow transition">
+            <span>⬇️</span>
+            <span>端末にダウンロード保存</span>
+          </a>
+        </div>
+      `;
+
+      galleryGrid.prepend(card);
+    }
+
+    // ギャラリークリア
+    function clearGallery() {
+      galleryGrid.innerHTML = '';
+      captureCount = 0;
+      captureCountEl.textContent = '0件';
+      galleryEmpty.classList.remove('hidden');
+      showToast('一覧をクリアしました');
+    }
+
+    // PWA・スマホ対応「先頭へ戻る」ボタン制御
+    const scrollTopBtn = document.getElementById('scroll-top-btn');
+    function handleScroll() {
+      const scrollPos = Math.max(window.scrollY, document.documentElement.scrollTop, document.body.scrollTop);
+      if (scrollPos > 80) {
+        scrollTopBtn.classList.remove('opacity-0', 'pointer-events-none');
+        scrollTopBtn.classList.add('opacity-100');
+      } else {
+        scrollTopBtn.classList.add('opacity-0', 'pointer-events-none');
+        scrollTopBtn.classList.remove('opacity-100');
+      }
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('touchmove', handleScroll, { passive: true });
+
+    function scrollToTop() {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      document.documentElement.scrollTo({ top: 0, behavior: 'smooth' });
+      document.body.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  </script>
+</body>
+</html>
